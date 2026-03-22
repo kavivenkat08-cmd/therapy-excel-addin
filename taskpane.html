@@ -785,20 +785,18 @@ async function writeFormattedReport(sheetName, rows) {
         blank:     { bg: '#FFFFFF', fg: '#FFFFFF', bold: false, size: 8,  hAlign: 'Left'   },
       };
 
-      for (let ri = 0; ri < rows.row; ri++) { }
-
       // Write rows
       for (let ri = 0; ri < rows.length; ri++) {
         const row = rows[ri];
-        const excelRow = ri + 1;
         const st = styles[row.style] || styles.data;
         const cells = row.cells || [''];
 
-        // Set row height
-        ws.getRow(excelRow).height = row.style === 'title' ? 36 :
-                                      row.style === 'subtitle' ? 24 :
-                                      row.style === 'blank' ? 8 :
-                                      row.style === 'section' ? 22 : 20;
+        // Set row height via range
+        const rowRange = ws.getRangeByIndexes(ri, 0, 1, numCols);
+        rowRange.format.rowHeight = row.style === 'title' ? 36 :
+                                    row.style === 'subtitle' ? 24 :
+                                    row.style === 'blank' ? 8 :
+                                    row.style === 'section' ? 22 : 20;
 
         // Title/subtitle — merge all columns
         if (row.style === 'title' || row.style === 'subtitle') {
@@ -825,7 +823,6 @@ async function writeFormattedReport(sheetName, rows) {
           range.format.font.name = 'Calibri';
           range.format.horizontalAlignment = 'Left';
           range.format.verticalAlignment = 'Center';
-          range.format.indentLevel = 1;
         }
         // Blank row
         else if (row.style === 'blank') {
@@ -835,7 +832,7 @@ async function writeFormattedReport(sheetName, rows) {
         // Normal rows — write cell by cell
         else {
           for (let ci = 0; ci < numCols; ci++) {
-            const cell = ws.getCell(excelRow, ci + 1);
+            const cell = ws.getCell(ri + 1, ci + 1);
             const val = cells[ci] !== undefined ? cells[ci] : '';
             cell.values = [[val]];
             cell.format.fill.color = st.bg;
@@ -844,17 +841,11 @@ async function writeFormattedReport(sheetName, rows) {
             cell.format.font.size = st.size;
             cell.format.font.name = 'Calibri';
             cell.format.verticalAlignment = 'Center';
-
-            // First column left-aligned, rest right-aligned for numbers
             if (ci === 0) {
               cell.format.horizontalAlignment = 'Left';
-              cell.format.indentLevel = row.style === 'data' || row.style === 'data_alt' ? 2 : 1;
             } else {
               cell.format.horizontalAlignment = 'Right';
             }
-
-            // Add borders
-            const borderStyle = { style: 'Thin', color: '#DDE3EA' };
             cell.format.borders.getItem('EdgeBottom').style = 'Thin';
             cell.format.borders.getItem('EdgeBottom').color = '#DDE3EA';
           }
@@ -862,9 +853,9 @@ async function writeFormattedReport(sheetName, rows) {
       }
 
       // Set column widths
-      ws.getColumn(1).format.columnWidth = 260;
-      for (let c = 2; c <= numCols; c++) {
-        ws.getColumn(c).format.columnWidth = 110;
+      ws.getRangeByIndexes(0, 0, 1, 1).format.columnWidth = 260;
+      for (let c = 1; c < numCols; c++) {
+        ws.getRangeByIndexes(0, c, 1, 1).format.columnWidth = 110;
       }
 
       // Freeze top rows
