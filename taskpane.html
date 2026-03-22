@@ -758,100 +758,101 @@ async function writeFormattedReport(sheetName, rows) {
   try {
     await Excel.run(async (ctx) => {
 
-      // Get or create sheet
+      // Step 1: Get or create sheet
       const sheets = ctx.workbook.worksheets;
       sheets.load('items/name');
       await ctx.sync();
+
       const existing = sheets.items.find(s => s.name === sheetName);
       let ws;
       if (existing) {
         ws = existing;
-        ws.getUsedRange().clear();
       } else {
         ws = sheets.add(sheetName);
       }
       await ctx.sync();
 
-      const numCols = Math.max(...rows.map(r => (r.cells && r.cells.length) ? r.cells.length : 1));
+      // Step 2: Clear used range safely
+      try {
+        const used = ws.getUsedRangeOrNullObject();
+        used.load('isNullObject');
+        await ctx.sync();
+        if (!used.isNullObject) {
+          used.clear('All');
+          await ctx.sync();
+        }
+      } catch(e) {}
 
+      // Step 3: Calculate numCols
+      let numCols = 1;
+      for (const row of rows) {
+        if (row.cells && row.cells.length > numCols) numCols = row.cells.length;
+      }
+
+      // Step 4: Build a 2D values array for ALL rows at once
+      const allValues = rows.map(row => {
+        const cells = row.cells || [];
+        const padded = Array.from({length: numCols}, (_, i) => {
+          const v = cells[i];
+          return (v === undefined || v === null) ? '' : String(v);
+        });
+        return padded;
+      });
+
+      // Step 5: Write ALL values in ONE operation
+      const fullRange = ws.getRangeByIndexes(0, 0, rows.length, numCols);
+      fullRange.values = allValues;
+      await ctx.sync();
+
+      // Step 6: Apply formatting row by row (no values changes, just format)
       const styles = {
-        title:     { bg: '#0D3B66', fg: '#FFFFFF', bold: true,  size: 14 },
-        subtitle:  { bg: '#0F7B8C', fg: '#FFFFFF', bold: true,  size: 11 },
-        section:   { bg: '#F4A261', fg: '#1A202C', bold: true,  size: 10 },
-        header:    { bg: '#E0F4F7', fg: '#0D3B66', bold: true,  size: 10 },
-        data:      { bg: '#FFFFFF', fg: '#1A202C', bold: false, size: 10 },
-        data_alt:  { bg: '#F7F9FB', fg: '#1A202C', bold: false, size: 10 },
-        total:     { bg: '#E8EEF4', fg: '#0D3B66', bold: true,  size: 10 },
-        subtotal:  { bg: '#E0F4F7', fg: '#0F7B8C', bold: true,  size: 10 },
-        metric:    { bg: '#FEF3E2', fg: '#92400E', bold: true,  size: 10 },
-        highlight: { bg: '#E8F5E9', fg: '#1B5E20', bold: true,  size: 10 },
-        blank:     { bg: '#FFFFFF', fg: '#FFFFFF', bold: false, size: 8  },
+        title:     { bg: '#0D3B66', fg: '#FFFFFF', bold: true,  size: 14, h: 36, align: 'Center' },
+        subtitle:  { bg: '#0F7B8C', fg: '#FFFFFF', bold: true,  size: 11, h: 24, align: 'Center' },
+        section:   { bg: '#F4A261', fg: '#1A202C', bold: true,  size: 10, h: 22, align: 'Left'   },
+        header:    { bg: '#E0F4F7', fg: '#0D3B66', bold: true,  size: 10, h: 20, align: 'Center' },
+        data:      { bg: '#FFFFFF', fg: '#1A202C', bold: false, size: 10, h: 18, align: 'Left'   },
+        data_alt:  { bg: '#F7F9FB', fg: '#1A202C', bold: false, size: 10, h: 18, align: 'Left'   },
+        total:     { bg: '#E8EEF4', fg: '#0D3B66', bold: true,  size: 10, h: 20, align: 'Left'   },
+        subtotal:  { bg: '#E0F4F7', fg: '#0F7B8C', bold: true,  size: 10, h: 20, align: 'Left'   },
+        metric:    { bg: '#FEF3E2', fg: '#92400E', bold: true,  size: 10, h: 20, align: 'Left'   },
+        highlight: { bg: '#E8F5E9', fg: '#1B5E20', bold: true,  size: 10, h: 20, align: 'Left'   },
+        blank:     { bg: '#FFFFFF', fg: '#FFFFFF', bold: false, size: 9,  h: 6,  align: 'Left'   },
       };
 
       for (let ri = 0; ri < rows.length; ri++) {
-        const row = rows[ri];
-        const st = styles[row.style] || styles.data;
-        const cells = (row.cells && row.cells.length) ? row.cells : [''];
-        const isMerged = ['title','subtitle','section','blank'].includes(row.style);
+        const st = styles[rows[ri].style] || styles.data;
+        const rng = ws.getRangeByIndexes(ri, 0, 1, numCols);
+        rng.format.fill.color      = st.bg;
+        rng.format.font.color      = st.fg;
+        rng.format.font.bold       = st.bold;
+        rng.format.font.size       = st.size;
+        rng.format.font.name       = 'Calibri';
+        rng.format.verticalAlignment   = 'Center';
+        rng.format.horizontalAlignment = st.align;
+        rng.format.rowHeight = st.h;
 
-        if (isMerged) {
-          // Write only to first cell, then style the full row range
-          const firstCell = ws.getRangeByIndexes(ri, 0, 1, 1);
-          firstCell.values = [[cells[0] || '']];
-          await ctx.sync();
-
-          // Style the merged row
-          const fullRow = ws.getRangeByIndexes(ri, 0, 1, numCols);
-          fullRow.format.fill.color = st.bg;
-          fullRow.format.font.color = st.fg;
-          fullRow.format.font.bold = st.bold;
-          fullRow.format.font.size = st.size;
-          fullRow.format.font.name = 'Calibri';
-          fullRow.format.verticalAlignment = 'Center';
-          fullRow.format.horizontalAlignment = (row.style === 'title' || row.style === 'subtitle') ? 'Center' : 'Left';
-          fullRow.format.rowHeight = row.style === 'title' ? 36 : row.style === 'subtitle' ? 24 : row.style === 'blank' ? 6 : 22;
-
-        } else {
-          // Pad cells array to numCols
-          const paddedCells = Array.from({length: numCols}, (_, i) => cells[i] !== undefined ? cells[i] : '');
-
-          // Write all values at once as a single row
-          const rowRange = ws.getRangeByIndexes(ri, 0, 1, numCols);
-          rowRange.values = [paddedCells];
-          rowRange.format.fill.color = st.bg;
-          rowRange.format.font.color = st.fg;
-          rowRange.format.font.bold = st.bold;
-          rowRange.format.font.size = st.size;
-          rowRange.format.font.name = 'Calibri';
-          rowRange.format.verticalAlignment = 'Center';
-          rowRange.format.rowHeight = 20;
-
-          // First column left, rest right-aligned
-          const labelCell = ws.getRangeByIndexes(ri, 0, 1, 1);
-          labelCell.format.horizontalAlignment = 'Left';
-
+        // For data rows: first col left, rest right
+        if (['data','data_alt','total','subtotal','metric','highlight'].includes(rows[ri].style)) {
+          ws.getRangeByIndexes(ri, 0, 1, 1).format.horizontalAlignment = 'Left';
           if (numCols > 1) {
-            const numRange = ws.getRangeByIndexes(ri, 1, 1, numCols - 1);
-            numRange.format.horizontalAlignment = 'Right';
+            ws.getRangeByIndexes(ri, 1, 1, numCols - 1).format.horizontalAlignment = 'Right';
           }
-
-          // Bottom border on each row
-          rowRange.format.borders.getItem('EdgeBottom').style = 'Thin';
-          rowRange.format.borders.getItem('EdgeBottom').color = '#DDE3EA';
+          rng.format.borders.getItem('EdgeBottom').style = 'Thin';
+          rng.format.borders.getItem('EdgeBottom').color = '#DDE3EA';
         }
       }
 
-      // Column widths — first col wide, rest equal
+      // Step 7: Column widths
       ws.getRangeByIndexes(0, 0, rows.length, 1).format.columnWidth = 250;
-      for (let c = 1; c < numCols; c++) {
-        ws.getRangeByIndexes(0, c, rows.length, 1).format.columnWidth = 115;
+      if (numCols > 1) {
+        ws.getRangeByIndexes(0, 1, rows.length, numCols - 1).format.columnWidth = 115;
       }
 
       ws.activate();
       await ctx.sync();
     });
 
-    addMessage('ai', `✅ Report written to the "${sheetName}" sheet with full colour formatting! Click that tab in your workbook to view it.`);
+    addMessage('ai', `✅ "${sheetName}" sheet created with full formatting! Click the tab at the bottom of your workbook.`);
   } catch(e) {
     addMessage('ai', `⚠️ Could not write to sheet: ${e.message}`);
   }
