@@ -623,19 +623,46 @@ async function sendToClaudeWithMsg(fullMsg, displayMsg) {
       },
       body: JSON.stringify({
         model: 'claude-sonnet-4-20250514',
-        max_tokens: 2048,
-        system: `You are an expert financial analyst and Excel specialist embedded inside Microsoft Excel as a task pane add-in for a therapy center in Dubai, UAE. 
+        max_tokens: 4096,
+        system: `You are an expert financial analyst embedded inside Microsoft Excel for a therapy center in Dubai, UAE called "ENGAGE BEHAVIORAL LEA ABI CTR SPLLC".
 
-Your job: help the user analyze their spreadsheet data and generate professional reports.
+When the user asks for ANY report, you MUST respond with a JSON object only — no prose, no markdown, just raw JSON.
 
-Key guidelines:
-- Currency is AED (UAE Dirham)
-- When generating tables for Excel, use tab-separated values (TSV) format so they can be pasted directly
-- Always include headers in tables
-- For financial reports use industry-standard structure (income statement, cash flow statement conventions)
-- Therapy center metrics: utilization % = sessions completed / available capacity × 100; no-show rate = no-shows / booked × 100
-- Keep responses concise and actionable
-- When you produce a table, end with: "💡 Click 'Write to Sheet' in the Sheet Data tab to paste this into Excel."`,
+JSON structure:
+{
+  "message": "Brief confirmation message to show in chat (1-2 sentences)",
+  "sheetName": "Name for the new Excel sheet",
+  "rows": [
+    {
+      "cells": ["Cell1", "Cell2", ...],
+      "style": "title|subtitle|section|header|data|data_alt|total|subtotal|metric|blank|highlight"
+    }
+  ]
+}
+
+Style guide:
+- "title": Company name / report title — dark navy background (#0D3B66), white bold text, large, merged across all columns
+- "subtitle": Report period / date — teal background (#0F7B8C), white text, merged
+- "section": Section headers like "CASH RECEIPTS", "OPERATING EXPENSES" — gold background (#F4A261), dark bold text
+- "header": Column headers — light teal background (#E0F4F7), navy bold text, centered
+- "data": Normal data rows — white background, left-aligned label, right-aligned numbers
+- "data_alt": Alternating data rows — very light gray (#F7F9FB)
+- "total": Total rows — light navy background (#E8EEF4), navy bold text
+- "subtotal": Subtotal rows — light teal (#E0F4F7), teal bold text
+- "metric": KPI metric rows — light gold (#FEF3E2), bold
+- "blank": Empty spacer row
+- "highlight": Important callout — green background for positive, red for negative
+
+Rules:
+- Currency is AED. Format numbers with commas e.g. 83,539.39
+- Negative numbers use parentheses e.g. (8,242.50)
+- Always start with title row, then subtitle, then blank, then content
+- Include a Key Metrics section at the bottom
+- Make it boardroom-ready and professional
+- Every report must have at least 3 blank separator rows between sections
+
+If the user asks a simple question (not a report), respond with:
+{"message": "your answer here", "sheetName": null, "rows": []}`,
         messages: chatHistory.slice(-10)
       })
     });
@@ -651,9 +678,25 @@ Key guidelines:
     }
 
     const data = await resp.json();
-    const reply = data.content[0]?.text || '(No response)';
-    chatHistory.push({ role: 'assistant', content: reply });
-    addMessage('ai', reply);
+    let rawReply = data.content[0]?.text || '{}';
+    chatHistory.push({ role: 'assistant', content: rawReply });
+
+    // Parse JSON response
+    let parsed;
+    try {
+      const clean = rawReply.replace(/```json|```/g, '').trim();
+      parsed = JSON.parse(clean);
+    } catch(e) {
+      addMessage('ai', rawReply);
+      return;
+    }
+
+    addMessage('ai', parsed.message || 'Report generated!');
+
+    // Write formatted report to Excel sheet
+    if (parsed.sheetName && parsed.rows && parsed.rows.length > 0) {
+      await writeFormattedReport(parsed.sheetName, parsed.rows);
+    }
 
   } catch(e) {
     removeTyping(typingId);
@@ -708,6 +751,134 @@ function addTyping() {
 function removeTyping(id) {
   const el = document.getElementById(id);
   if (el) el.remove();
+}
+
+/* ── Write beautifully formatted report to Excel ── */
+async function writeFormattedReport(sheetName, rows) {
+  try {
+    await Excel.run(async (ctx) => {
+      const sheets = ctx.workbook.worksheets;
+      let ws;
+      try {
+        ws = sheets.getItem(sheetName);
+        ws.load('name');
+        await ctx.sync();
+        ws.getUsedRange().clear();
+      } catch {
+        ws = sheets.add(sheetName);
+      }
+
+      const numCols = Math.max(...rows.map(r => r.cells ? r.cells.length : 1));
+
+      // Style definitions
+      const styles = {
+        title:     { bg: '#0D3B66', fg: '#FFFFFF', bold: true,  size: 14, hAlign: 'Center' },
+        subtitle:  { bg: '#0F7B8C', fg: '#FFFFFF', bold: true,  size: 11, hAlign: 'Center' },
+        section:   { bg: '#F4A261', fg: '#1A202C', bold: true,  size: 10, hAlign: 'Left'   },
+        header:    { bg: '#E0F4F7', fg: '#0D3B66', bold: true,  size: 10, hAlign: 'Center' },
+        data:      { bg: '#FFFFFF', fg: '#1A202C', bold: false, size: 10, hAlign: 'Left'   },
+        data_alt:  { bg: '#F7F9FB', fg: '#1A202C', bold: false, size: 10, hAlign: 'Left'   },
+        total:     { bg: '#E8EEF4', fg: '#0D3B66', bold: true,  size: 10, hAlign: 'Left'   },
+        subtotal:  { bg: '#E0F4F7', fg: '#0F7B8C', bold: true,  size: 10, hAlign: 'Left'   },
+        metric:    { bg: '#FEF3E2', fg: '#92400E', bold: true,  size: 10, hAlign: 'Left'   },
+        highlight: { bg: '#E8F5E9', fg: '#1B5E20', bold: true,  size: 10, hAlign: 'Left'   },
+        blank:     { bg: '#FFFFFF', fg: '#FFFFFF', bold: false, size: 8,  hAlign: 'Left'   },
+      };
+
+      for (let ri = 0; ri < rows.row; ri++) { }
+
+      // Write rows
+      for (let ri = 0; ri < rows.length; ri++) {
+        const row = rows[ri];
+        const excelRow = ri + 1;
+        const st = styles[row.style] || styles.data;
+        const cells = row.cells || [''];
+
+        // Set row height
+        ws.getRow(excelRow).height = row.style === 'title' ? 36 :
+                                      row.style === 'subtitle' ? 24 :
+                                      row.style === 'blank' ? 8 :
+                                      row.style === 'section' ? 22 : 20;
+
+        // Title/subtitle — merge all columns
+        if (row.style === 'title' || row.style === 'subtitle') {
+          const range = ws.getRangeByIndexes(ri, 0, 1, numCols);
+          range.merge();
+          range.values = [[cells[0] || '']];
+          range.format.fill.color = st.bg;
+          range.format.font.color = st.fg;
+          range.format.font.bold = st.bold;
+          range.format.font.size = st.size;
+          range.format.font.name = 'Calibri';
+          range.format.horizontalAlignment = st.hAlign;
+          range.format.verticalAlignment = 'Center';
+        }
+        // Section header — merge all columns
+        else if (row.style === 'section') {
+          const range = ws.getRangeByIndexes(ri, 0, 1, numCols);
+          range.merge();
+          range.values = [[cells[0] || '']];
+          range.format.fill.color = st.bg;
+          range.format.font.color = st.fg;
+          range.format.font.bold = st.bold;
+          range.format.font.size = st.size;
+          range.format.font.name = 'Calibri';
+          range.format.horizontalAlignment = 'Left';
+          range.format.verticalAlignment = 'Center';
+          range.format.indentLevel = 1;
+        }
+        // Blank row
+        else if (row.style === 'blank') {
+          const range = ws.getRangeByIndexes(ri, 0, 1, numCols);
+          range.format.fill.color = '#FFFFFF';
+        }
+        // Normal rows — write cell by cell
+        else {
+          for (let ci = 0; ci < numCols; ci++) {
+            const cell = ws.getCell(excelRow, ci + 1);
+            const val = cells[ci] !== undefined ? cells[ci] : '';
+            cell.values = [[val]];
+            cell.format.fill.color = st.bg;
+            cell.format.font.color = st.fg;
+            cell.format.font.bold = st.bold;
+            cell.format.font.size = st.size;
+            cell.format.font.name = 'Calibri';
+            cell.format.verticalAlignment = 'Center';
+
+            // First column left-aligned, rest right-aligned for numbers
+            if (ci === 0) {
+              cell.format.horizontalAlignment = 'Left';
+              cell.format.indentLevel = row.style === 'data' || row.style === 'data_alt' ? 2 : 1;
+            } else {
+              cell.format.horizontalAlignment = 'Right';
+            }
+
+            // Add borders
+            const borderStyle = { style: 'Thin', color: '#DDE3EA' };
+            cell.format.borders.getItem('EdgeBottom').style = 'Thin';
+            cell.format.borders.getItem('EdgeBottom').color = '#DDE3EA';
+          }
+        }
+      }
+
+      // Set column widths
+      ws.getColumn(1).format.columnWidth = 260;
+      for (let c = 2; c <= numCols; c++) {
+        ws.getColumn(c).format.columnWidth = 110;
+      }
+
+      // Freeze top rows
+      ws.freezePanes.freezeRows(3);
+
+      // Activate sheet
+      ws.activate();
+      await ctx.sync();
+    });
+
+    addMessage('ai', `✅ Report written to sheet "${sheetName}" with full formatting! Check the new tab in your workbook.`);
+  } catch(e) {
+    addMessage('ai', `⚠️ Could not write to sheet: ${e.message}`);
+  }
 }
 
 function clearAndReset() {
