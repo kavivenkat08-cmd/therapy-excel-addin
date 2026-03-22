@@ -1,0 +1,721 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Claude AI — Therapy Center</title>
+<script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+<style>
+  :root {
+    --teal: #0F7B8C;
+    --teal-light: #E0F4F7;
+    --navy: #0D3B66;
+    --gold: #F4A261;
+    --bg: #F7F9FB;
+    --white: #FFFFFF;
+    --border: #DDE3EA;
+    --text: #1A202C;
+    --muted: #6B7280;
+    --success: #2E7D32;
+    --success-bg: #E8F5E9;
+    --error: #C62828;
+    --error-bg: #FFEBEE;
+    --radius: 8px;
+    --radius-sm: 5px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    font-size: 13px;
+    color: var(--text);
+    background: var(--bg);
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* ── Header ── */
+  .header {
+    background: var(--navy);
+    color: white;
+    padding: 10px 14px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+  }
+  .header-icon {
+    width: 30px; height: 30px;
+    background: var(--teal);
+    border-radius: var(--radius-sm);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 15px; flex-shrink: 0;
+  }
+  .header h1 { font-size: 13px; font-weight: 600; line-height: 1.2; }
+  .header p  { font-size: 10px; opacity: .7; margin-top: 1px; }
+  .status-dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: #4CAF50;
+    margin-left: auto;
+    flex-shrink: 0;
+    box-shadow: 0 0 5px rgba(76,175,80,.6);
+  }
+
+  /* ── API Key screen ── */
+  #api-screen {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    gap: 14px;
+    text-align: center;
+  }
+  #api-screen .lock-icon { font-size: 36px; }
+  #api-screen h2 { font-size: 15px; font-weight: 600; color: var(--navy); }
+  #api-screen p  { font-size: 12px; color: var(--muted); line-height: 1.6; }
+  #api-screen input {
+    width: 100%; padding: 9px 11px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    font-size: 12px; font-family: monospace;
+    background: var(--white);
+  }
+  #api-screen input:focus { outline: 2px solid var(--teal); border-color: transparent; }
+  .api-link { font-size: 11px; color: var(--teal); text-decoration: none; }
+  .api-link:hover { text-decoration: underline; }
+
+  /* ── Main layout ── */
+  #main-screen { flex: 1; display: none; flex-direction: column; overflow: hidden; }
+
+  /* ── Tabs ── */
+  .tabs {
+    display: flex;
+    background: var(--white);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .tab {
+    flex: 1; padding: 8px 4px;
+    border: none; background: none; cursor: pointer;
+    font-size: 11px; font-weight: 500; color: var(--muted);
+    border-bottom: 2px solid transparent;
+    transition: all .15s;
+  }
+  .tab.active { color: var(--teal); border-bottom-color: var(--teal); }
+  .tab:hover:not(.active) { background: var(--bg); }
+
+  /* ── Tab panels ── */
+  .panel { display: none; flex: 1; flex-direction: column; overflow: hidden; }
+  .panel.active { display: flex; }
+  .panel-body { flex: 1; overflow-y: auto; padding: 12px; }
+
+  /* ── Chat panel ── */
+  #chat-messages {
+    display: flex; flex-direction: column; gap: 10px;
+    min-height: 100%;
+  }
+  .msg { display: flex; gap: 8px; animation: fadeIn .2s ease; }
+  @keyframes fadeIn { from { opacity:0; transform:translateY(4px); } to { opacity:1; } }
+  .msg-avatar {
+    width: 26px; height: 26px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; flex-shrink: 0; margin-top: 1px;
+  }
+  .msg.user .msg-avatar  { background: var(--navy); color: white; }
+  .msg.ai .msg-avatar    { background: var(--teal); color: white; }
+  .msg-body { flex: 1; }
+  .msg-bubble {
+    padding: 8px 11px; border-radius: var(--radius);
+    line-height: 1.55; font-size: 12.5px;
+  }
+  .msg.user .msg-bubble  { background: var(--navy); color: white; border-top-right-radius: 2px; }
+  .msg.ai .msg-bubble    { background: var(--white); border: 1px solid var(--border); border-top-left-radius: 2px; }
+  .msg-time { font-size: 10px; color: var(--muted); margin-top: 3px; }
+  .msg.user .msg-time    { text-align: right; }
+
+  /* action buttons inside AI message */
+  .action-btn {
+    display: inline-flex; align-items: center; gap: 5px;
+    margin-top: 8px; padding: 5px 10px;
+    background: var(--teal-light); color: var(--teal);
+    border: 1px solid #9ADCE6; border-radius: var(--radius-sm);
+    font-size: 11px; font-weight: 600; cursor: pointer;
+    transition: background .12s;
+  }
+  .action-btn:hover { background: #C7EDF3; }
+
+  /* typing indicator */
+  .typing .msg-bubble { background: var(--white); border: 1px solid var(--border); padding: 10px 14px; }
+  .typing-dots { display: flex; gap: 4px; align-items: center; height: 14px; }
+  .typing-dots span {
+    width: 6px; height: 6px; background: var(--muted); border-radius: 50%;
+    animation: bounce .9s infinite;
+  }
+  .typing-dots span:nth-child(2) { animation-delay: .15s; }
+  .typing-dots span:nth-child(3) { animation-delay: .3s; }
+  @keyframes bounce { 0%,60%,100%{transform:translateY(0)} 30%{transform:translateY(-5px)} }
+
+  /* ── Chat input ── */
+  .chat-footer {
+    padding: 10px 12px;
+    background: var(--white);
+    border-top: 1px solid var(--border);
+    display: flex; gap: 7px; align-items: flex-end;
+    flex-shrink: 0;
+  }
+  .chat-footer textarea {
+    flex: 1; resize: none; padding: 7px 10px;
+    border: 1px solid var(--border); border-radius: var(--radius);
+    font-size: 12.5px; font-family: inherit; line-height: 1.4;
+    max-height: 90px; overflow-y: auto;
+    transition: border-color .15s;
+  }
+  .chat-footer textarea:focus { outline: none; border-color: var(--teal); }
+  .send-btn {
+    width: 34px; height: 34px;
+    background: var(--teal); color: white;
+    border: none; border-radius: var(--radius);
+    cursor: pointer; display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0; transition: background .12s;
+  }
+  .send-btn:hover { background: #0A6677; }
+  .send-btn:disabled { background: var(--border); cursor: not-allowed; }
+
+  /* ── Quick Prompts panel ── */
+  .qp-section { margin-bottom: 14px; }
+  .qp-section h3 {
+    font-size: 11px; font-weight: 600; color: var(--muted);
+    text-transform: uppercase; letter-spacing: .05em; margin-bottom: 7px;
+  }
+  .qp-btn {
+    width: 100%; text-align: left; padding: 8px 10px;
+    border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--white); cursor: pointer;
+    font-size: 12px; line-height: 1.4; color: var(--text);
+    margin-bottom: 5px; display: flex; align-items: flex-start; gap: 8px;
+    transition: border-color .12s, background .12s;
+  }
+  .qp-btn:hover { background: var(--teal-light); border-color: #9ADCE6; }
+  .qp-tag {
+    font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 10px;
+    flex-shrink: 0; margin-top: 1px;
+  }
+  .t-cash { background: #E8F5E9; color: #2E7D32; }
+  .t-prod { background: #E3F2FD; color: #1565C0; }
+  .t-mis  { background: #FFF8E1; color: #E65100; }
+  .t-fore { background: #FCE4EC; color: #AD1457; }
+
+  /* ── Sheet Data panel ── */
+  .data-info {
+    background: var(--white); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 10px 12px; margin-bottom: 10px;
+  }
+  .data-info h3 { font-size: 12px; font-weight: 600; margin-bottom: 6px; }
+  .data-row { display: flex; justify-content: space-between; padding: 3px 0; font-size: 12px; }
+  .data-row span:last-child { color: var(--muted); }
+  .sel-range { font-family: monospace; font-size: 11px; background: var(--bg); padding: 1px 5px; border-radius: 3px; }
+  .data-action-btn {
+    width: 100%; padding: 8px; border-radius: var(--radius);
+    border: 1px solid var(--border); background: var(--white);
+    cursor: pointer; font-size: 12px; font-weight: 500;
+    color: var(--teal); margin-bottom: 6px; transition: background .12s;
+  }
+  .data-action-btn:hover { background: var(--teal-light); }
+
+  /* ── Shared ── */
+  .btn-primary {
+    width: 100%; padding: 9px; border-radius: var(--radius);
+    background: var(--teal); color: white; border: none;
+    font-size: 13px; font-weight: 600; cursor: pointer; transition: background .12s;
+  }
+  .btn-primary:hover { background: #0A6677; }
+  .badge {
+    display: inline-block; padding: 2px 7px; border-radius: 10px;
+    font-size: 10px; font-weight: 600;
+  }
+  .badge-ok { background: var(--success-bg); color: var(--success); }
+  .badge-warn { background: #FFF3E0; color: #E65100; }
+  .alert {
+    padding: 8px 11px; border-radius: var(--radius);
+    font-size: 12px; line-height: 1.5; margin-bottom: 8px;
+  }
+  .alert-info { background: var(--teal-light); border-left: 3px solid var(--teal); color: var(--navy); }
+  .alert-ok   { background: var(--success-bg); border-left: 3px solid var(--success); color: var(--success); }
+  .progress-bar {
+    height: 3px; background: var(--border); border-radius: 2px; overflow: hidden; margin-top: 6px;
+  }
+  .progress-fill {
+    height: 100%; background: var(--teal);
+    border-radius: 2px;
+    animation: progress 2s ease infinite;
+  }
+  @keyframes progress {
+    0%   { width: 10%; margin-left: 0; }
+    50%  { width: 40%; margin-left: 30%; }
+    100% { width: 10%; margin-left: 90%; }
+  }
+  a { color: var(--teal); }
+
+  /* scrollbar */
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="header">
+  <div class="header-icon">🏥</div>
+  <div>
+    <h1>Claude AI</h1>
+    <p>Therapy Center Assistant</p>
+  </div>
+  <div class="status-dot" id="statusDot" title="Disconnected"></div>
+</div>
+
+<!-- API Key Screen -->
+<div id="api-screen">
+  <div class="lock-icon">🔑</div>
+  <h2>Connect your Anthropic API Key</h2>
+  <p>Your key is stored locally in this Excel file only.<br>It is never sent anywhere except Anthropic's API.</p>
+  <input type="password" id="apiKeyInput" placeholder="sk-ant-api03-..." autocomplete="off"/>
+  <button class="btn-primary" onclick="saveApiKey()">Connect & Start</button>
+  <a href="https://console.anthropic.com/account/keys" class="api-link" target="_blank">Get your free API key at console.anthropic.com →</a>
+  <p style="font-size:11px;color:var(--muted)">Usage is billed directly to your Anthropic account at standard rates (~$0.003 per report).</p>
+</div>
+
+<!-- Main Screen -->
+<div id="main-screen">
+  <!-- Tabs -->
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab('chat')">💬 Ask Claude</button>
+    <button class="tab" onclick="switchTab('quick')">⚡ Quick Reports</button>
+    <button class="tab" onclick="switchTab('data')">📋 Sheet Data</button>
+  </div>
+
+  <!-- CHAT PANEL -->
+  <div class="panel active" id="tab-chat">
+    <div class="panel-body" id="chatBody">
+      <div id="chat-messages"></div>
+    </div>
+    <div class="chat-footer">
+      <textarea id="chatInput" rows="1" placeholder="Ask anything about your data…"
+        onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
+      <button class="send-btn" id="sendBtn" onclick="sendMessage()">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- QUICK REPORTS PANEL -->
+  <div class="panel" id="tab-quick">
+    <div class="panel-body">
+      <div class="alert alert-info">Click any report to send it to Claude. Your selected data will be included automatically.</div>
+
+      <div class="qp-section">
+        <h3>💰 Cash Flow</h3>
+        <button class="qp-btn" onclick="quickPrompt('cash1')">
+          <span class="qp-tag t-cash">Monthly</span>Build a monthly cash flow report with income vs expenses, net position, and variance vs last month
+        </button>
+        <button class="qp-btn" onclick="quickPrompt('cash2')">
+          <span class="qp-tag t-cash">Weekly</span>Create a weekly cash flow tracker showing collections, payroll and running balance
+        </button>
+      </div>
+
+      <div class="qp-section">
+        <h3>📈 Therapist Productivity</h3>
+        <button class="qp-btn" onclick="quickPrompt('prod1')">
+          <span class="qp-tag t-prod">Utilization</span>Calculate utilization % per therapist with RAG status — Red &lt;70%, Amber 70–85%, Green &gt;85%
+        </button>
+        <button class="qp-btn" onclick="quickPrompt('prod2')">
+          <span class="qp-tag t-prod">Revenue</span>Show revenue per therapist, avg session rate, no-show rate, and a performance ranking
+        </button>
+      </div>
+
+      <div class="qp-section">
+        <h3>📊 MIS Reports</h3>
+        <button class="qp-btn" onclick="quickPrompt('mis1')">
+          <span class="qp-tag t-mis">KPI</span>Generate a KPI scorecard — total patients, revenue, avg session value, utilization, no-show rate
+        </button>
+        <button class="qp-btn" onclick="quickPrompt('mis2')">
+          <span class="qp-tag t-mis">Monthly</span>Create a month-over-month comparison with variance analysis and trend commentary
+        </button>
+      </div>
+
+      <div class="qp-section">
+        <h3>🔮 Forecasting</h3>
+        <button class="qp-btn" onclick="quickPrompt('fore1')">
+          <span class="qp-tag t-fore">12-Month</span>Build a 12-month revenue forecast with conservative, base, and optimistic scenarios
+        </button>
+        <button class="qp-btn" onclick="quickPrompt('fore2')">
+          <span class="qp-tag t-fore">Capacity</span>Show available session capacity vs booked capacity and revenue opportunity gap
+        </button>
+      </div>
+
+      <div class="qp-section">
+        <h3>🗂 Other</h3>
+        <button class="qp-btn" onclick="quickPrompt('ins1')">
+          <span class="qp-tag t-mis">Insurance</span>Track insurance claims by payer — submitted, approved, rejected, outstanding amount
+        </button>
+        <button class="qp-btn" onclick="quickPrompt('pay1')">
+          <span class="qp-tag t-prod">Payroll</span>Calculate therapist payroll — sessions completed, rate, total pay, and deductions summary
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- SHEET DATA PANEL -->
+  <div class="panel" id="tab-data">
+    <div class="panel-body">
+      <div class="data-info">
+        <h3>Active Sheet</h3>
+        <div class="data-row"><span>Sheet name</span><span id="sheetName">—</span></div>
+        <div class="data-row"><span>Used range</span><span id="usedRange" class="sel-range">—</span></div>
+        <div class="data-row"><span>Rows</span><span id="rowCount">—</span></div>
+        <div class="data-row"><span>Columns</span><span id="colCount">—</span></div>
+        <div class="data-row"><span>Selected range</span><span id="selRange" class="sel-range">—</span></div>
+      </div>
+
+      <button class="data-action-btn" onclick="loadSheetInfo()">🔄 Refresh Sheet Info</button>
+      <button class="data-action-btn" onclick="analyzeSelection()">🔍 Analyze Selected Cells</button>
+      <button class="data-action-btn" onclick="writeReport()">📝 Write Report to New Sheet</button>
+      <button class="data-action-btn" onclick="clearAndReset()">🧹 Clear Chat History</button>
+
+      <hr style="border:none;border-top:1px solid var(--border);margin:12px 0"/>
+
+      <div class="qp-section">
+        <h3>API Settings</h3>
+        <div class="data-row" style="margin-bottom:8px">
+          <span>Status</span>
+          <span class="badge badge-ok" id="apiStatus">Connected</span>
+        </div>
+        <button class="data-action-btn" onclick="resetApiKey()" style="color:var(--error)">🔑 Change API Key</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+Office.onReady(function(info) {
+  if (info.host === Office.HostType.Excel) {
+    initAddin();
+  }
+});
+
+let apiKey = '';
+let chatHistory = [];
+const STORAGE_KEY = 'claudeTherapyApiKey';
+
+/* ── Init ── */
+function initAddin() {
+  // Try to load key from document settings
+  Office.context.document.settings.set; // ensure settings available
+  const saved = Office.context.document.settings.get(STORAGE_KEY);
+  if (saved) {
+    apiKey = saved;
+    showMain();
+  }
+  loadSheetInfo();
+}
+
+/* ── API Key management ── */
+function saveApiKey() {
+  const val = document.getElementById('apiKeyInput').value.trim();
+  if (!val.startsWith('sk-ant')) {
+    alert('Please enter a valid Anthropic API key (starts with sk-ant)');
+    return;
+  }
+  apiKey = val;
+  Office.context.document.settings.set(STORAGE_KEY, val);
+  Office.context.document.settings.saveAsync(() => showMain());
+}
+
+function resetApiKey() {
+  Office.context.document.settings.set(STORAGE_KEY, '');
+  Office.context.document.settings.saveAsync(() => {
+    apiKey = '';
+    document.getElementById('main-screen').style.display = 'none';
+    document.getElementById('api-screen').style.display = 'flex';
+  });
+}
+
+function showMain() {
+  document.getElementById('api-screen').style.display = 'none';
+  document.getElementById('main-screen').style.display = 'flex';
+  document.getElementById('statusDot').style.background = '#4CAF50';
+  // welcome message
+  addMessage('ai', "Hi! I'm Claude, your therapy center Excel assistant. I can see your spreadsheet data and help you build:\n\n• Cash flow dashboards\n• Therapist productivity reports\n• MIS summaries\n• Revenue forecasts\n\nSelect some data and ask me anything, or use the ⚡ Quick Reports tab.");
+}
+
+/* ── Tab switching ── */
+function switchTab(tab) {
+  document.querySelectorAll('.tab').forEach((t,i) => {
+    t.classList.toggle('active', ['chat','quick','data'][i] === tab);
+  });
+  document.querySelectorAll('.panel').forEach((p,i) => {
+    p.classList.toggle('active', ['tab-chat','tab-quick','tab-data'][i] === 'tab-'+tab);
+  });
+  if (tab === 'data') loadSheetInfo();
+}
+
+/* ── Sheet Info ── */
+async function loadSheetInfo() {
+  try {
+    await Excel.run(async (ctx) => {
+      const sheet = ctx.workbook.worksheets.getActiveWorksheet();
+      const range = sheet.getUsedRange();
+      range.load(['address','rowCount','columnCount']);
+      sheet.load('name');
+      const sel = ctx.workbook.getSelectedRange();
+      sel.load('address');
+      await ctx.sync();
+      document.getElementById('sheetName').textContent = sheet.name;
+      document.getElementById('usedRange').textContent = range.address;
+      document.getElementById('rowCount').textContent = range.rowCount;
+      document.getElementById('colCount').textContent = range.columnCount;
+      document.getElementById('selRange').textContent = sel.address;
+    });
+  } catch(e) {}
+}
+
+/* ── Get sheet data ── */
+async function getSelectedData() {
+  let result = '';
+  try {
+    await Excel.run(async (ctx) => {
+      const range = ctx.workbook.getSelectedRange();
+      range.load(['values','address','rowCount','columnCount']);
+      await ctx.sync();
+      if (range.rowCount <= 1 && range.columnCount <= 1) {
+        // no meaningful selection — get used range instead
+        const sheet = ctx.workbook.worksheets.getActiveWorksheet();
+        const used = sheet.getUsedRange();
+        used.load(['values','address']);
+        await ctx.sync();
+        if (used.values && used.values.length) {
+          const rows = used.values.slice(0, 50); // cap at 50 rows for token budget
+          result = `Sheet data (${used.address}):\n` + rows.map(r => r.join('\t')).join('\n');
+        }
+      } else {
+        const rows = range.values.slice(0, 50);
+        result = `Selected data (${range.address}):\n` + rows.map(r => r.join('\t')).join('\n');
+      }
+    });
+  } catch(e) {}
+  return result;
+}
+
+/* ── Write to new sheet ── */
+async function writeToSheet(content, sheetName) {
+  try {
+    await Excel.run(async (ctx) => {
+      const sheets = ctx.workbook.worksheets;
+      let ws;
+      try {
+        ws = sheets.getItem(sheetName);
+        ws.load('name');
+        await ctx.sync();
+        ws.getUsedRange().clear();
+      } catch {
+        ws = sheets.add(sheetName);
+      }
+      const lines = content.split('\n').filter(l => l.trim());
+      lines.forEach((line, i) => {
+        const cells = line.split('\t');
+        const range = ws.getRangeByIndexes(i, 0, 1, cells.length);
+        range.values = [cells];
+      });
+      ws.activate();
+      await ctx.sync();
+    });
+    addMessage('ai', `✅ Report written to sheet "${sheetName}"! Check the new tab in your workbook.`);
+  } catch(e) {
+    addMessage('ai', `⚠️ Couldn't write to sheet: ${e.message}`);
+  }
+}
+
+/* ── Quick Prompts ── */
+const PROMPTS = {
+  cash1: "Using my spreadsheet data below, build a professional monthly cash flow report. Create a formatted table with income categories, expense categories, net cash position, and month-over-month variance. Format with clear totals and highlight negative values. Output as tab-separated data I can paste into Excel.\n\n",
+  cash2: "Using my data, create a weekly cash flow tracker with opening balance, collections, payroll, other expenses, closing balance, and running 4-week total. Output as tab-separated rows ready for Excel.\n\n",
+  prod1: "Analyze my therapist data and calculate: sessions booked, sessions completed, available capacity, utilization % (completed/available), and RAG status (Red <70%, Amber 70-85%, Green >85%). Sort by utilization descending. Output as tab-separated table.\n\n",
+  prod2: "From my data, show per-therapist: total revenue, sessions count, average session rate, no-shows count, no-show %, and a performance rank. Include a summary row. Output as tab-separated Excel-ready table.\n\n",
+  mis1:  "Generate an executive KPI scorecard from my data. Include: Total Patients, Total Revenue (AED), Avg Revenue per Session, Overall Utilization %, No-Show Rate %, Revenue vs Last Period. Format it as a clean management summary.\n\n",
+  mis2:  "Create a month-over-month comparison table from my data with absolute variance (AED) and percentage variance columns. Add a brief commentary row highlighting the biggest changes. Output as tab-separated data.\n\n",
+  fore1: "Using my data as a baseline, build a 12-month revenue forecast with three scenarios: Conservative (10% below trend), Base (trend continuation), Optimistic (10% above trend). Show monthly figures and cumulative totals. Output as tab-separated Excel-ready table.\n\n",
+  fore2: "Calculate session capacity utilization from my data: available capacity, booked sessions, utilization %, and revenue opportunity gap (unharvested capacity × avg session rate). Show by therapist and total. Output as tab-separated table.\n\n",
+  ins1:  "From my data, create an insurance claims tracker: Therapist, Payer/Insurance, Claims Submitted, Claims Approved, Claims Rejected, Rejection Rate %, Amount Outstanding. Output as tab-separated table.\n\n",
+  pay1:  "Build a payroll summary from my data: Therapist Name, Sessions Completed, Session Rate (AED), Gross Pay, any deductions, Net Pay. Include totals row. Output as tab-separated Excel-ready table.\n\n",
+};
+
+async function quickPrompt(key) {
+  switchTab('chat');
+  const sheetData = await getSelectedData();
+  const userMsg = PROMPTS[key] + (sheetData || '(No sheet data found — please select a data range first)');
+  await sendToClaudeWithMsg(userMsg, PROMPTS[key].split('\n')[0]); // show short version to user
+}
+
+async function analyzeSelection() {
+  switchTab('chat');
+  const data = await getSelectedData();
+  await sendToClaudeWithMsg(
+    "Please analyze this data from my therapy center spreadsheet and give me insights:\n\n" + data,
+    "Analyze my selected data"
+  );
+}
+
+async function writeReport() {
+  if (!chatHistory.length) { alert('Have a conversation with Claude first, then I will write the report to a new sheet.'); return; }
+  const lastAI = [...chatHistory].reverse().find(m => m.role === 'assistant');
+  if (!lastAI) return;
+  const content = lastAI.content;
+  const hasTabs = content.includes('\t') || content.includes('|');
+  if (hasTabs) {
+    const clean = content.replace(/\|/g, '\t').split('\n').filter(l => l.trim() && !l.match(/^[\s\-|]+$/)).join('\n');
+    await writeToSheet(clean, 'Claude Report');
+  } else {
+    addMessage('ai', "The last response doesn't contain a table. Ask me to generate a report in table format first, then click Write to Sheet.");
+  }
+}
+
+/* ── Chat ── */
+function handleKey(e) {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+}
+
+function autoResize(el) {
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 90) + 'px';
+}
+
+async function sendMessage() {
+  const input = document.getElementById('chatInput');
+  const text = input.value.trim();
+  if (!text || !apiKey) return;
+  input.value = ''; input.style.height = 'auto';
+
+  const sheetData = await getSelectedData();
+  const fullMsg = sheetData ? text + '\n\n---\nSpreadsheet context:\n' + sheetData : text;
+  await sendToClaudeWithMsg(fullMsg, text);
+}
+
+async function sendToClaudeWithMsg(fullMsg, displayMsg) {
+  addMessage('user', displayMsg || fullMsg);
+  const typingId = addTyping();
+  document.getElementById('sendBtn').disabled = true;
+
+  chatHistory.push({ role: 'user', content: fullMsg });
+
+  try {
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 2048,
+        system: `You are an expert financial analyst and Excel specialist embedded inside Microsoft Excel as a task pane add-in for a therapy center in Dubai, UAE. 
+
+Your job: help the user analyze their spreadsheet data and generate professional reports.
+
+Key guidelines:
+- Currency is AED (UAE Dirham)
+- When generating tables for Excel, use tab-separated values (TSV) format so they can be pasted directly
+- Always include headers in tables
+- For financial reports use industry-standard structure (income statement, cash flow statement conventions)
+- Therapy center metrics: utilization % = sessions completed / available capacity × 100; no-show rate = no-shows / booked × 100
+- Keep responses concise and actionable
+- When you produce a table, end with: "💡 Click 'Write to Sheet' in the Sheet Data tab to paste this into Excel."`,
+        messages: chatHistory.slice(-10)
+      })
+    });
+
+    removeTyping(typingId);
+    document.getElementById('sendBtn').disabled = false;
+
+    if (!resp.ok) {
+      const err = await resp.json();
+      addMessage('ai', `❌ API Error: ${err.error?.message || resp.statusText}`);
+      chatHistory.pop();
+      return;
+    }
+
+    const data = await resp.json();
+    const reply = data.content[0]?.text || '(No response)';
+    chatHistory.push({ role: 'assistant', content: reply });
+    addMessage('ai', reply);
+
+  } catch(e) {
+    removeTyping(typingId);
+    document.getElementById('sendBtn').disabled = false;
+    addMessage('ai', `❌ Network error: ${e.message}. Make sure you are connected to the internet.`);
+    chatHistory.pop();
+  }
+}
+
+/* ── Message rendering ── */
+let msgId = 0;
+function addMessage(role, text) {
+  const container = document.getElementById('chat-messages');
+  const id = 'msg-' + (++msgId);
+  const time = new Date().toLocaleTimeString('en-AE', { hour:'2-digit', minute:'2-digit' });
+  const avatar = role === 'user' ? 'U' : 'AI';
+
+  const div = document.createElement('div');
+  div.className = `msg ${role}`;
+  div.id = id;
+
+  const formatted = text
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>')
+    .replace(/\n/g,'<br/>');
+
+  div.innerHTML = `
+    <div class="msg-avatar">${avatar}</div>
+    <div class="msg-body">
+      <div class="msg-bubble">${formatted}</div>
+      <div class="msg-time">${time}</div>
+    </div>`;
+
+  container.appendChild(div);
+  const body = document.getElementById('chatBody');
+  body.scrollTop = body.scrollHeight;
+  return id;
+}
+
+function addTyping() {
+  const container = document.getElementById('chat-messages');
+  const id = 'typing-' + (++msgId);
+  const div = document.createElement('div');
+  div.className = 'msg ai typing';
+  div.id = id;
+  div.innerHTML = `<div class="msg-avatar">AI</div><div class="msg-body"><div class="msg-bubble"><div class="typing-dots"><span></span><span></span><span></span></div><div class="progress-bar"><div class="progress-fill"></div></div></div></div>`;
+  container.appendChild(div);
+  document.getElementById('chatBody').scrollTop = 999999;
+  return id;
+}
+
+function removeTyping(id) {
+  const el = document.getElementById(id);
+  if (el) el.remove();
+}
+
+function clearAndReset() {
+  if (!confirm('Clear chat history?')) return;
+  chatHistory = [];
+  document.getElementById('chat-messages').innerHTML = '';
+  addMessage('ai', "Chat cleared. Ready to help with your therapy center reports!");
+}
+</script>
+</body>
+</html>
