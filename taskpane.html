@@ -757,116 +757,101 @@ function removeTyping(id) {
 async function writeFormattedReport(sheetName, rows) {
   try {
     await Excel.run(async (ctx) => {
+
+      // Get or create sheet
       const sheets = ctx.workbook.worksheets;
+      sheets.load('items/name');
+      await ctx.sync();
+      const existing = sheets.items.find(s => s.name === sheetName);
       let ws;
-      try {
-        ws = sheets.getItem(sheetName);
-        ws.load('name');
-        await ctx.sync();
+      if (existing) {
+        ws = existing;
         ws.getUsedRange().clear();
-      } catch {
+      } else {
         ws = sheets.add(sheetName);
       }
+      await ctx.sync();
 
-      const numCols = Math.max(...rows.map(r => r.cells ? r.cells.length : 1));
+      const numCols = Math.max(...rows.map(r => (r.cells && r.cells.length) ? r.cells.length : 1));
 
-      // Style definitions
       const styles = {
-        title:     { bg: '#0D3B66', fg: '#FFFFFF', bold: true,  size: 14, hAlign: 'Center' },
-        subtitle:  { bg: '#0F7B8C', fg: '#FFFFFF', bold: true,  size: 11, hAlign: 'Center' },
-        section:   { bg: '#F4A261', fg: '#1A202C', bold: true,  size: 10, hAlign: 'Left'   },
-        header:    { bg: '#E0F4F7', fg: '#0D3B66', bold: true,  size: 10, hAlign: 'Center' },
-        data:      { bg: '#FFFFFF', fg: '#1A202C', bold: false, size: 10, hAlign: 'Left'   },
-        data_alt:  { bg: '#F7F9FB', fg: '#1A202C', bold: false, size: 10, hAlign: 'Left'   },
-        total:     { bg: '#E8EEF4', fg: '#0D3B66', bold: true,  size: 10, hAlign: 'Left'   },
-        subtotal:  { bg: '#E0F4F7', fg: '#0F7B8C', bold: true,  size: 10, hAlign: 'Left'   },
-        metric:    { bg: '#FEF3E2', fg: '#92400E', bold: true,  size: 10, hAlign: 'Left'   },
-        highlight: { bg: '#E8F5E9', fg: '#1B5E20', bold: true,  size: 10, hAlign: 'Left'   },
-        blank:     { bg: '#FFFFFF', fg: '#FFFFFF', bold: false, size: 8,  hAlign: 'Left'   },
+        title:     { bg: '#0D3B66', fg: '#FFFFFF', bold: true,  size: 14 },
+        subtitle:  { bg: '#0F7B8C', fg: '#FFFFFF', bold: true,  size: 11 },
+        section:   { bg: '#F4A261', fg: '#1A202C', bold: true,  size: 10 },
+        header:    { bg: '#E0F4F7', fg: '#0D3B66', bold: true,  size: 10 },
+        data:      { bg: '#FFFFFF', fg: '#1A202C', bold: false, size: 10 },
+        data_alt:  { bg: '#F7F9FB', fg: '#1A202C', bold: false, size: 10 },
+        total:     { bg: '#E8EEF4', fg: '#0D3B66', bold: true,  size: 10 },
+        subtotal:  { bg: '#E0F4F7', fg: '#0F7B8C', bold: true,  size: 10 },
+        metric:    { bg: '#FEF3E2', fg: '#92400E', bold: true,  size: 10 },
+        highlight: { bg: '#E8F5E9', fg: '#1B5E20', bold: true,  size: 10 },
+        blank:     { bg: '#FFFFFF', fg: '#FFFFFF', bold: false, size: 8  },
       };
 
-      // Write rows
       for (let ri = 0; ri < rows.length; ri++) {
         const row = rows[ri];
         const st = styles[row.style] || styles.data;
-        const cells = row.cells || [''];
+        const cells = (row.cells && row.cells.length) ? row.cells : [''];
+        const isMerged = ['title','subtitle','section','blank'].includes(row.style);
 
-        // Set row height via range
-        const rowRange = ws.getRangeByIndexes(ri, 0, 1, numCols);
-        rowRange.format.rowHeight = row.style === 'title' ? 36 :
-                                    row.style === 'subtitle' ? 24 :
-                                    row.style === 'blank' ? 8 :
-                                    row.style === 'section' ? 22 : 20;
+        if (isMerged) {
+          // Write only to first cell, then style the full row range
+          const firstCell = ws.getRangeByIndexes(ri, 0, 1, 1);
+          firstCell.values = [[cells[0] || '']];
+          await ctx.sync();
 
-        // Title/subtitle — merge all columns
-        if (row.style === 'title' || row.style === 'subtitle') {
-          const range = ws.getRangeByIndexes(ri, 0, 1, numCols);
-          range.merge();
-          range.values = [[cells[0] || '']];
-          range.format.fill.color = st.bg;
-          range.format.font.color = st.fg;
-          range.format.font.bold = st.bold;
-          range.format.font.size = st.size;
-          range.format.font.name = 'Calibri';
-          range.format.horizontalAlignment = st.hAlign;
-          range.format.verticalAlignment = 'Center';
-        }
-        // Section header — merge all columns
-        else if (row.style === 'section') {
-          const range = ws.getRangeByIndexes(ri, 0, 1, numCols);
-          range.merge();
-          range.values = [[cells[0] || '']];
-          range.format.fill.color = st.bg;
-          range.format.font.color = st.fg;
-          range.format.font.bold = st.bold;
-          range.format.font.size = st.size;
-          range.format.font.name = 'Calibri';
-          range.format.horizontalAlignment = 'Left';
-          range.format.verticalAlignment = 'Center';
-        }
-        // Blank row
-        else if (row.style === 'blank') {
-          const range = ws.getRangeByIndexes(ri, 0, 1, numCols);
-          range.format.fill.color = '#FFFFFF';
-        }
-        // Normal rows — write cell by cell
-        else {
-          for (let ci = 0; ci < numCols; ci++) {
-            const cell = ws.getCell(ri + 1, ci + 1);
-            const val = cells[ci] !== undefined ? cells[ci] : '';
-            cell.values = [[val]];
-            cell.format.fill.color = st.bg;
-            cell.format.font.color = st.fg;
-            cell.format.font.bold = st.bold;
-            cell.format.font.size = st.size;
-            cell.format.font.name = 'Calibri';
-            cell.format.verticalAlignment = 'Center';
-            if (ci === 0) {
-              cell.format.horizontalAlignment = 'Left';
-            } else {
-              cell.format.horizontalAlignment = 'Right';
-            }
-            cell.format.borders.getItem('EdgeBottom').style = 'Thin';
-            cell.format.borders.getItem('EdgeBottom').color = '#DDE3EA';
+          // Style the merged row
+          const fullRow = ws.getRangeByIndexes(ri, 0, 1, numCols);
+          fullRow.format.fill.color = st.bg;
+          fullRow.format.font.color = st.fg;
+          fullRow.format.font.bold = st.bold;
+          fullRow.format.font.size = st.size;
+          fullRow.format.font.name = 'Calibri';
+          fullRow.format.verticalAlignment = 'Center';
+          fullRow.format.horizontalAlignment = (row.style === 'title' || row.style === 'subtitle') ? 'Center' : 'Left';
+          fullRow.format.rowHeight = row.style === 'title' ? 36 : row.style === 'subtitle' ? 24 : row.style === 'blank' ? 6 : 22;
+
+        } else {
+          // Pad cells array to numCols
+          const paddedCells = Array.from({length: numCols}, (_, i) => cells[i] !== undefined ? cells[i] : '');
+
+          // Write all values at once as a single row
+          const rowRange = ws.getRangeByIndexes(ri, 0, 1, numCols);
+          rowRange.values = [paddedCells];
+          rowRange.format.fill.color = st.bg;
+          rowRange.format.font.color = st.fg;
+          rowRange.format.font.bold = st.bold;
+          rowRange.format.font.size = st.size;
+          rowRange.format.font.name = 'Calibri';
+          rowRange.format.verticalAlignment = 'Center';
+          rowRange.format.rowHeight = 20;
+
+          // First column left, rest right-aligned
+          const labelCell = ws.getRangeByIndexes(ri, 0, 1, 1);
+          labelCell.format.horizontalAlignment = 'Left';
+
+          if (numCols > 1) {
+            const numRange = ws.getRangeByIndexes(ri, 1, 1, numCols - 1);
+            numRange.format.horizontalAlignment = 'Right';
           }
+
+          // Bottom border on each row
+          rowRange.format.borders.getItem('EdgeBottom').style = 'Thin';
+          rowRange.format.borders.getItem('EdgeBottom').color = '#DDE3EA';
         }
       }
 
-      // Set column widths
-      ws.getRangeByIndexes(0, 0, 1, 1).format.columnWidth = 260;
+      // Column widths — first col wide, rest equal
+      ws.getRangeByIndexes(0, 0, rows.length, 1).format.columnWidth = 250;
       for (let c = 1; c < numCols; c++) {
-        ws.getRangeByIndexes(0, c, 1, 1).format.columnWidth = 110;
+        ws.getRangeByIndexes(0, c, rows.length, 1).format.columnWidth = 115;
       }
 
-      // Freeze top rows
-      ws.freezePanes.freezeRows(3);
-
-      // Activate sheet
       ws.activate();
       await ctx.sync();
     });
 
-    addMessage('ai', `✅ Report written to sheet "${sheetName}" with full formatting! Check the new tab in your workbook.`);
+    addMessage('ai', `✅ Report written to the "${sheetName}" sheet with full colour formatting! Click that tab in your workbook to view it.`);
   } catch(e) {
     addMessage('ai', `⚠️ Could not write to sheet: ${e.message}`);
   }
